@@ -9,6 +9,8 @@ import { DAY_LABELS, buildWeek, formatDuration, loadOverrides, removeOverride, s
 
 import { addBtn, el } from '../ui/helpers.js';
 
+import { getCaracSettings } from '../features/caracs.js';
+import { weekGoalsFor } from '../features/work-goals.js';
 import { PLAN_CATS, PLAN_SWATCHES, applyPlanColors, planColor, prefsNow, savePrefs } from '../features/prefs.js';
 
 
@@ -84,6 +86,14 @@ export async function renderPlanning(root) {
       MODE_LABELS[week.mode] ? el('div', { class: 'pl-mode' }, MODE_LABELS[week.mode]) : null
     ]),
     el('button', { class: 'pl-nav', onclick: () => go(1), 'aria-label': 'Semaine suivante', html: iconHtml('chevr') })
+  ]));
+  // Temps libre de la semaine et travail attendu (même calcul que les quêtes : temps libre × % des Options ;
+  // avant la 1re semaine « dynamique », l'ancien objectif fixe).
+  const goals = await weekGoalsFor(week.monday);
+  const pct = (await getCaracSettings()).workPct;
+  root.appendChild(el('div', { class: 'pl-stats' }, [
+    el('div', { class: 'pl-stat' }, [el('span', { class: 'pl-stat-l' }, 'Temps libre'), el('b', { class: 'pl-stat-v' }, formatDuration(week.freeMinutes))]),
+    el('div', { class: 'pl-stat' }, [el('span', { class: 'pl-stat-l' }, goals.dynamic ? `Travail attendu · ${pct} %` : 'Travail attendu · objectif fixe'), el('b', { class: 'pl-stat-v accent' }, formatDuration(Math.round(goals.total)))])
   ]));
   root.appendChild(el('div', { class: 'pl-days' }, week.days.map((d, i) => el('button', {
     class: `pl-day${i === view.day ? ' active' : ''}${d.date === today ? ' today' : ''}`,
