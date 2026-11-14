@@ -59,6 +59,12 @@ Les données vivent uniquement dans le navigateur. Profil → Sauvegarde → Exp
 
 ## v5.0 (suite)
 
+- **Version admin** : l'écran de lancement affiche « DailyUp » puis « ADMINISTRATEUR » dessous, et le titre de l'onglet devient « DailyUp Administrateur » (`showSplash` dans `main.js`, selon `IS_ADMIN`). La version utilisateur est inchangée.
+
+- **Tutoriel** : nouvelle 1re page « Comment t'appelles-tu ? » (pseudo, enregistré dans le profil et affiché sur l'accueil) ; correction du « null » affiché en bas de la 1re page (`replaceChildren` recevait `null`).
+
+- **Planning** : sous le sélecteur de semaine, deux cartes : **temps libre** de la semaine et **travail attendu** (temps libre × % des Options ; avant le lundi 16/11/2026, `dynamicFrom`, l'ancien objectif fixe est indiqué comme tel). Même calcul que les quêtes (`weekGoalsFor`).
+
 - **Onglet Sport** : la carte « Sorties de la semaine » reprend le format des blocs d'« Aujourd'hui » (icône, titre, sous-titre, compteur − / + plus petit à droite, sans le mot « Objectif »).
 
 - **Carte du Sport en mode clair** : la carte suit le thème : `buildMapStyle()` et `mapPalette()` dans `pages/sport.js` (palettes sombre et claire, tracé foncé en clair), contrôles, attribution et marqueurs adaptés dans `style.css`. La palette est lue à la création de la carte.

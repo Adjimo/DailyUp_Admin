@@ -1978,3 +1978,16 @@ input[type="checkbox"]:checked { background-color: var(--accent); border-color: 
 .sp-runs .cnt-btn { width: 28px; height: 28px; border-radius: 8px; font-size: 1.05rem; }
 .sp-runs .cnt-val { min-width: 20px; text-align: center; font-size: 1rem; }
 .sp-runs .hq-excuse-row { flex: 1 1 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* ── v5 · Planning : temps libre de la semaine / travail attendu ── */
+.pl-stats { display: flex; gap: 8px; margin: 0 0 12px; }
+.pl-stat { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--r-md); }
+.pl-stat-l { font-size: .72rem; color: var(--text-mute); }
+.pl-stat-v { font-size: 1.05rem; color: var(--text); }
+.pl-stat-v.accent { color: var(--accent); }
+
+/* ── v5 · Tutoriel : page du pseudo ── */
+.ob-name { width: 100%; margin-top: 18px; padding: 12px 14px; font-size: 1.1rem; text-align: center; }
+
+/* ── v5 · Splash de la version administrateur ── */
+.splash-admin { margin-top: 6px; font-weight: 600; font-size: 1.05rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
