@@ -1,6 +1,6 @@
 {
-  "name": "DailyUp",
-  "short_name": "DailyUp",
+  "name": "DailyUp Admin",
+  "short_name": "DailyUp Admin",
   "description": "Gamifie ta vie de prépa et de course",
   "start_url": "./",
   "scope": "./",
