@@ -15,10 +15,19 @@ import { prefsNow } from './features/prefs.js';
 import { showToast } from './ui/helpers.js';
 import { hydrateStaticIcons } from './ui/icons.js';
 import { initSwipeNav, navigate } from './ui/router.js';
+import { IS_ADMIN } from './core/state.js';
 
 export function showSplash() {
   const splash = document.getElementById('splash');
   const content = splash.querySelector('.splash-content');
+  // Version administrateur : « DailyUp Administrateur » au lancement (seul IS_ADMIN, dans core/state.js, distingue les deux builds).
+  if (IS_ADMIN && !content.querySelector('.splash-admin')) {
+    const sub = document.createElement('div');
+    sub.className = 'splash-admin';
+    sub.textContent = 'Administrateur';
+    content.querySelector('.splash-title')?.after(sub);
+    document.title = 'DailyUp Administrateur';
+  }
   setTimeout(() => content.classList.add('show'), 50);
   setTimeout(() => splash.classList.add('fade-out'), 900);
   setTimeout(() => splash.classList.add('hidden'), 1300);
