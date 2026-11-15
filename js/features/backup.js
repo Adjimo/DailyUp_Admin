@@ -337,8 +337,8 @@ export async function showWeekReportIfDue() {
 // repeat = true : chaque semaine, les jours choisis. repeat = false : une seule fois par jour choisi (prochaine occurrence, `pending`), puis la notification disparaît.
 // L'ancien format { daily, date } est converti à la lecture (`normCustom`).
 export const REMINDER_DEFS = {
-  work:  { icon: 'books', label: 'Saisir le travail du jour', title: 'DailyUp · Travail', body: "N'oublie pas de saisir ton travail d'aujourd'hui.", def: '21:30' },
-  sleep: { icon: 'moon', label: 'Se coucher à l’heure', title: 'DailyUp · Sommeil', body: 'Il est temps de se préparer : couché avant 23h30.', def: '23:15' },
+  work:  { icon: 'books', label: 'Fin de travail', title: 'DailyUp · Travail', body: "N'oublie pas de saisir ton travail d'aujourd'hui.", def: '21:30' },
+  sleep: { icon: 'moon', label: 'Coucher − 15 min', title: 'DailyUp · Sommeil', body: 'Il est temps de se préparer : couché avant 23h30.', def: '23:15' },
 };
 
 export const REMINDER_WINDOW_MIN = 90;   // rattrapage : on déclenche jusqu'à 90 min après l'heure prévue
@@ -611,9 +611,7 @@ export async function renderRemindersCard(card) {
       <button type="button" class="pl-seg ${auto ? 'active' : ''}" data-mode="auto">Automatique</button>
       <button type="button" class="pl-seg ${auto ? '' : 'active'}" data-mode="manual">Heure fixe</button>
     </div>
-    <div class="dim text-xs mt-2 mb-2">${auto
-      ? 'Travail : à ton heure de fin de travail du jour. Sommeil : 15 min avant ton heure de coucher du jour. Les heures changent donc selon le jour.'
-      : 'La même heure chaque jour. Par défaut, elle est déduite de ton lundi (fin de travail, coucher − 15 min).'}</div>
+    <div class="mt-2"></div>
     <div class="rem-list">
       ${Object.keys(REMINDER_DEFS).map(k => `
         <div class="rg-row rem-row" data-kind="${k}">
@@ -628,8 +626,7 @@ export async function renderRemindersCard(card) {
           <input class="rem-on" type="checkbox" ${c.on ? 'checked' : ''} aria-label="Activer" />
         </div>`).join('')}
     </div>
-    ${auto ? '<div class="dim text-xs mt-1">Heures d\u2019aujourd\u2019hui affichées ; elles s\u2019adaptent chaque jour.</div>' : ''}
-    <div class="dim text-xs mt-2">${permTxt}.</div>
+    <div class="rem-note mt-2">${permTxt}</div>
     <div class="rem-help dim text-xs mt-1" id="rem-help" hidden></div>
     <div class="save-actions mt-2">
       ${perm !== 'granted' ? '<button class="btn sm" id="rem-perm">Activer les notifications</button>' : ''}
