@@ -55,3 +55,20 @@ export function dayInfo(k) {
   const hol = HOLIDAYS.find(h => h.date === k);
   return { vacation: vac ? vac.name : null, holiday: hol ? hol.name : null };
 }
+
+// ── Périodes à horaires particuliers ─────────────────────────────────────────
+// Concours : repos, aucun objectif de travail. Du jour avant le 1er écrit (CONCOURS_START − 1) jusqu'au dimanche
+// qui suit les écrits (le mode « allégé » reprend le lundi ALLEGE_START). Une journée de concours n'est jamais une
+// journée de vacances, même pendant les vacances de Printemps.
+export const REST_FROM = '2027-04-11';
+// Vacances et révisions : planning simplifié, à partir de la 1re semaine « dynamique » (avant : historique inchangé).
+export const PERIOD_FROM = '2026-11-16';
+export const isRestDay = (k) => k >= REST_FROM && k < ALLEGE_START;
+export function periodOf(k) {
+  if (isRestDay(k)) return { kind: 'rest', label: 'Concours' };
+  if (k < PERIOD_FROM) return null;
+  const vac = dayInfo(k).vacation;
+  if (vac) return { kind: 'simple', label: `Vacances · ${vac}` };
+  if (weekMode(mondayOf(k)) === 'revision') return { kind: 'simple', label: 'Révisions' };
+  return null;
+}
