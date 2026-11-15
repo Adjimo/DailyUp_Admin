@@ -25,7 +25,7 @@
 //    jours comptés / 7 (réglage `prorateFirstWeek`).
 //  - recalcul déterministe depuis `start` (1er septembre 2026) : même données → mêmes valeurs.
 import { weekKey } from '../core/dates.js';
-import { addDays, mondayOf, parseKey } from '../core/calendar.js';
+import { addDays, isRestDay, mondayOf, parseKey } from '../core/calendar.js';
 import { dbAll, dbAllLive, dbDelete, dbGet, dbPut } from '../core/db.js';
 import { getMalusExcuses } from './penalties.js';
 import { buildWeek, loadOverrides } from './planning.js';
@@ -187,7 +187,20 @@ export function scoreWeek(ctx) {
   // Matières : 100 % heures de travail vs objectif de la matière ; objectifs propres à CETTE semaine (temps libre × %, cf. weekGoals)
   const G = weekGoals(cfg, monday, raw.freeByWeek?.[monday]);
   const subj = { math: ['maths'], phys: ['physique'], si: ['si'], verb: ['langues', 'francais'] };
+  // Semaine de concours (7 jours de repos) : aucun objectif de travail, la valeur ne bouge pas. Le travail saisi reste possible :
+  // il donne un petit BONUS, au même rapport que d'habitude (temps travaillé / objectif habituel de la matière) et avec la même
+  // pente que le dépassement d'objectif (+0,25 de ratio ⇒ +(overScore − goalScore) sur le score, pondéré par 1 − alpha sur la valeur).
+  const restWeek = days.length > 0 && days.every(isRestDay);
+  const REF = weekGoals(cfg, monday, null);                        // objectifs habituels (fixes) : référence des bonus
   for (const id of ['math', 'phys', 'si', 'verb']) {
+    if (restWeek) {
+      const minutes = sumMinutes(raw.logs, days, subj[id]);
+      const parts = subj[id].map(k => ({ key: k, minutes: sumMinutes(raw.logs, days, [k]), goal: 0 }));
+      const bonus = REF[id] > 0 ? Math.round((minutes / REF[id]) * ((cfg.overScore - cfg.goalScore) / (cfg.overRatio - 1)) * (1 - cfg.alpha) * 100) / 100 : 0;
+      out[id] = combine([{ key: 'heures', w: 100, score: null, info: { kind: 'minutes', value: minutes, goal: 0, parts, rest: true, bonus } }], cfg.scoreCap);
+      out[id].meta = { minutes, goalMin: 0, parts, rest: true, bonus };
+      continue;
+    }
     const goal = G[id] * (G.dynamic ? 1 : f);                    // 1re semaine partielle : proratisation seulement pour les anciens objectifs fixes
     const minutes = sumMinutes(raw.logs, days, subj[id]);
     const parts = subj[id].map(k => ({ key: k, minutes: sumMinutes(raw.logs, days, [k]), goal: G[k] * (G.dynamic ? 1 : f) }));
@@ -198,7 +211,9 @@ export function scoreWeek(ctx) {
   // Discipline : quêtes réussies + nuits avant 23h30 (7/7 = objectif)
   const isExcused = (q) => cfg.neutralizeExcused && !!raw.excuses?.[`${wk}|${q.id}`];
   const allQs = raw.quests.filter(q => (q.category === 'main' || q.category === 'secondary') && (sportOn() || q.id !== 'wq-runs'));   // sans sport : pas de quête de sorties
-  const qs = allQs.filter(q => !isExcused(q));                 // quêtes justifiées neutralisées (hors dénominateur)
+  const workKey = { 'wq-work': 'total', 'wq-langues': 'langues', 'wq-lettres': 'francais', 'wq-si': 'si' };
+  const noGoal = (q) => workKey[q.id] && q.type === 'weekly-hours' && G[workKey[q.id]] <= 0 && restWeek;   // concours : pas d'objectif, donc ni réussie ni ratée
+  const qs = allQs.filter(q => !isExcused(q) && !noGoal(q));   // quêtes justifiées ou sans objectif neutralisées (hors dénominateur)
   const nbExcused = allQs.length - qs.length;
   const done = qs.filter(q => {
     const c = raw.comps.find(x => x.questId === q.id && x.weekKey === wk);
@@ -244,6 +259,8 @@ function replay(cfg, raw, lastClosed) {
       const S = res[c.id].empty ? values[c.id] : clamp(res[c.id].S, cfg.scoreZero, cfg.scoreCap);   // plancher / plafond ; rien de mesurable : valeur inchangée
       scores[c.id] = Math.round(S * 100) / 100;
       nextValues[c.id] = Math.round((cfg.alpha * values[c.id] + (1 - cfg.alpha) * S) * 100) / 100;
+      const bonus = res[c.id].meta?.bonus || 0;                // semaine de concours : bonus de travail ajouté à la valeur inchangée
+      if (bonus > 0) nextValues[c.id] = Math.round(clamp(values[c.id] + bonus, cfg.scoreZero, cfg.scoreCap) * 100) / 100;
       details[c.id] = res[c.id].comps.map(x => ({ key: x.key, score: x.score == null ? null : Math.round(x.score * 100) / 100, contrib: Math.round(x.contrib * 100) / 100, note: x.note }));
     }
     prevRunRatios.push(res.dex.meta.runsExcused ? null : res.dex.meta.runRatio);   // semaine justifiée : place gardée dans la fenêtre, mais ignorée (null)
@@ -281,7 +298,10 @@ export async function projectCurrentWeek(today = new Date()) {
   for (const c of CARACS) {
     const r = res[c.id];
     const S = r.empty ? values[c.id] : clamp(r.S, cfg.scoreZero, cfg.scoreCap);
-    out[c.id] = { current: values[c.id], projected: Math.round((cfg.alpha * values[c.id] + (1 - cfg.alpha) * S) * 100) / 100, S, meta: r.meta || {}, comps: r.comps };
+    let projected = Math.round((cfg.alpha * values[c.id] + (1 - cfg.alpha) * S) * 100) / 100;
+    const bonus = r.meta?.bonus || 0;
+    if (bonus > 0) projected = Math.round(clamp(values[c.id] + bonus, cfg.scoreZero, cfg.scoreCap) * 100) / 100;
+    out[c.id] = { current: values[c.id], projected, S, meta: r.meta || {}, comps: r.comps };
   }
   return out;
 }

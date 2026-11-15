@@ -116,11 +116,13 @@ export async function computeWeekPenalties(wk) {
   const excusedKeys = [];
   let malusFactor = 0;
   const malusDetails = [];
+  const gctxM = await makeGoalCtx();
   for (const q of quests.filter(x => (x.category === 'main' || (fullRules && x.category === 'secondary')) && (sportOn() || x.id !== 'wq-runs'))) {
     const c = completions.find(x => x.questId === q.id && x.weekKey === wk);
     const ratio = c?.ratio || 0;
     const exKey = `${wk}|${q.id}`;
     if (excuses[exKey]) { excusedKeys.push(exKey); continue; }
+    if (q.type === 'weekly-hours' && await questGoalHours(q, wk, gctxM) <= 0) continue;   // objectif nul (concours) : rien d'attendu, donc rien de raté
     const f = malusFactorFromRatio(ratio);
     if (f > 0) { malusFactor += f; malusDetails.push({ questId: q.id, factor: f, ratio }); }
   }

@@ -14,7 +14,9 @@ import { recomputeAllRecords, recomputeAllXp } from '../pages/sport.js';
 import { el, escapeHtml, showToast } from '../ui/helpers.js';
 import { iconHtml } from '../ui/icons.js';
 import { markExport } from './storage.js';
-import { bedLabelFor, bedMinFor } from './prefs.js';
+import { bedLabelFor, bedMinFor, prefsNow } from './prefs.js';
+import { workEndMinFor } from './planning.js';
+import { isRestDay } from '../core/calendar.js';
 
 // Construit le snapshot complet de l'app (utilisé par export et backup auto).
 // `backups` lui-même est volontairement EXCLU pour éviter la récursion.
@@ -327,24 +329,51 @@ export async function showWeekReportIfDue() {
 }
 
 // RAPPELS (notifications locales)
-// meta `reminders` : { work: {on, time}, sleep: {on, time}, lastFired: { work: 'YYYY-MM-DD', sleep: ... } }
+// meta `reminders` : { mode: 'auto'|'manual', work: {on, time}, sleep: {on, time}, lastFired: { work: 'YYYY-MM-DD', sleep: ... } }
+// mode 'auto' : travail = heure de fin de travail du jour ; sommeil = 15 min avant l'heure de coucher du jour.
+// mode 'manual' : une heure fixe, la même chaque jour (initialisée d'après le lundi après l'inscription).
 // Sans serveur push, l'app ne peut notifier QUE lorsqu'elle est ouverte (ou en arrière-plan récent).
 // Notifications personnalisées (meta `customReminders`) : [{ id, label, time, daily, date, lastFired }].
 export const REMINDER_DEFS = {
   work:  { icon: 'books', label: 'Saisir le travail du jour', title: 'DailyUp · Travail', body: "N'oublie pas de saisir ton travail d'aujourd'hui.", def: '21:30' },
-  sleep: { icon: 'moon', label: 'Se coucher à l’heure', title: 'DailyUp · Sommeil', body: 'Il est temps de se préparer : couché avant 23h30.', def: '22:45' },
+  sleep: { icon: 'moon', label: 'Se coucher à l’heure', title: 'DailyUp · Sommeil', body: 'Il est temps de se préparer : couché avant 23h30.', def: '23:15' },
 };
 
 export const REMINDER_WINDOW_MIN = 90;   // rattrapage : on déclenche jusqu'à 90 min après l'heure prévue
 
 export async function getReminders() {
   const v = (await dbGet('meta', 'reminders'))?.value || {};
-  const out = { lastFired: v.lastFired || {} };
+  const out = { mode: v.mode === 'auto' ? 'auto' : 'manual', lastFired: v.lastFired || {} };
   for (const k of Object.keys(REMINDER_DEFS)) out[k] = { on: !!v[k]?.on, time: v[k]?.time || REMINDER_DEFS[k].def };
   return out;
 }
 
 export async function saveReminders(r) { await dbPut('meta', { key: 'reminders', value: r }); }
+
+export const SLEEP_LEAD_MIN = 15;
+const hm = (m) => { const x = ((Math.round(m) % 1440) + 1440) % 1440; return `${String(Math.floor(x / 60)).padStart(2, '0')}:${String(x % 60).padStart(2, '0')}`; };
+
+// Heure (minutes depuis minuit) d'un rappel pour le jour `dateKey`.
+export function reminderMinFor(kind, r, dateKey) {
+  if (r.mode === 'auto') {
+    if (kind === 'work') return Math.min(1439, workEndMinFor(dateKey));
+    return Math.min(1420, bedMinFor(dateKey) - SLEEP_LEAD_MIN);   // coucher après minuit : on prévient en fin de soirée
+  }
+  const c = r[kind];
+  // Sommeil à l'heure par défaut (jamais réglée) : 15 min avant le coucher choisi pour CE soir.
+  if (kind === 'sleep' && c.time === REMINDER_DEFS.sleep.def) return Math.min(1420, bedMinFor(dateKey) - SLEEP_LEAD_MIN);
+  return timeToMin(c.time);
+}
+
+// Après l'inscription : heures fixes déduites du lundi (fin de travail ; coucher − 15 min). N'active rien.
+export async function seedReminderTimesFromMonday() {
+  const h = prefsNow().hours?.[0];
+  if (!h) return;
+  const r = await getReminders();
+  r.work.time = hm(h.end);
+  r.sleep.time = hm(Math.min(1420, h.bed - SLEEP_LEAD_MIN));
+  await saveReminders(r);
+}
 
 export function timeToMin(t) { const [h, m] = String(t).split(':').map(Number); return (h || 0) * 60 + (m || 0); }
 
@@ -382,8 +411,8 @@ export async function checkReminders() {
   for (const kind of Object.keys(REMINDER_DEFS)) {
     const c = r[kind];
     if (!c.on || r.lastFired[kind] === today) continue;
-    // Sommeil à l'heure par défaut : 45 min avant le coucher choisi pour CE soir (tutoriel) ; une heure personnalisée garde la priorité.
-    const t = kind === 'sleep' && c.time === REMINDER_DEFS.sleep.def ? Math.min(1439 - REMINDER_WINDOW_MIN, bedMinFor(today) - 45) : timeToMin(c.time);
+    if (kind === 'work' && isRestDay(today)) continue;          // concours : pas de saisie de travail attendue
+    const t = reminderMinFor(kind, r, today);
     if (nowMin < t || nowMin > t + REMINDER_WINDOW_MIN) continue;
     r.lastFired[kind] = today; changed = true;
     if (kind === 'work') {
@@ -478,13 +507,24 @@ export async function renderRemindersCard(card) {
   const r = await getReminders();
   const custom = await getCustomReminders();
   const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
-  const permTxt = perm === 'granted' ? 'Notifications autorisées' : perm === 'denied' ? 'Notifications bloquées : autorise-les pour ce site dans les réglages du téléphone ou du navigateur' : perm === 'unsupported' ? 'Notifications non disponibles ici' : 'Notifications non autorisées';
+  const permTxt = perm === 'granted' ? 'Notifications autorisées' : perm === 'denied' ? 'Notifications bloquées sur cet appareil' : perm === 'unsupported' ? 'Notifications non disponibles ici' : 'Notifications non autorisées';
+  const auto = r.mode === 'auto';
+  const today = todayKey();
+  const timeFor = (k) => hm(auto ? reminderMinFor(k, r, today) : timeToMin(r[k].time) );
+  const allAuto = auto && r.work.on && r.sleep.on;
   card.innerHTML = `
+    <div class="pl-scope rem-mode" role="group" aria-label="Mode des rappels">
+      <button type="button" class="pl-seg ${auto ? 'active' : ''}" data-mode="auto">Automatique</button>
+      <button type="button" class="pl-seg ${auto ? '' : 'active'}" data-mode="manual">Heure fixe</button>
+    </div>
+    <div class="dim text-xs mt-2 mb-2">${auto
+      ? 'Travail : à ton heure de fin de travail du jour. Sommeil : 15 min avant ton heure de coucher du jour. Les heures changent donc selon le jour.'
+      : 'La même heure chaque jour. Par défaut, elle est déduite de ton lundi (fin de travail, coucher − 15 min).'}</div>
     <div class="rem-list">
       ${Object.keys(REMINDER_DEFS).map(k => `
         <div class="rg-row rem-row" data-kind="${k}">
           <span class="rg-reason">${iconHtml(REMINDER_DEFS[k].icon)} ${REMINDER_DEFS[k].label}</span>
-          <input class="input rem-time" type="time" value="${r[k].time}" />
+          <input class="input rem-time" type="time" value="${timeFor(k)}" ${auto ? 'disabled' : ''} />
           <input class="rem-on" type="checkbox" ${r[k].on ? 'checked' : ''} aria-label="Activer" />
         </div>`).join('')}
       ${custom.map(c => `
@@ -494,31 +534,60 @@ export async function renderRemindersCard(card) {
           <button class="btn ghost sm rem-del" aria-label="Supprimer">${iconHtml('close')}</button>
         </div>`).join('')}
     </div>
+    ${auto ? '<div class="dim text-xs mt-1">Heures d\u2019aujourd\u2019hui affichées ; elles s\u2019adaptent chaque jour.</div>' : ''}
     <div class="dim text-xs mt-2">${permTxt}.</div>
+    <div class="rem-help dim text-xs mt-1" id="rem-help" hidden></div>
     <div class="save-actions mt-2">
-      ${perm === 'default' ? '<button class="btn ghost sm" id="rem-perm">Autoriser les notifications</button>' : ''}
+      ${perm !== 'granted' ? '<button class="btn sm" id="rem-perm">Activer les notifications</button>' : ''}
+      ${allAuto ? '' : '<button class="btn sm" id="rem-auto">Activer les notifications automatiques</button>'}
       <button class="add-btn" id="rem-add"><span class="add-plus">+</span> Ajouter une notification</button>
     </div>
   `;
+  const askPermission = async () => {
+    if (!('Notification' in window)) return 'unsupported';
+    try { await Notification.requestPermission(); } catch (e) { /* silencieux */ }
+    return Notification.permission;
+  };
+  const showHelp = (state) => {
+    const h = card.querySelector('#rem-help');
+    h.hidden = false;
+    h.innerHTML = state === 'unsupported'
+      ? 'Ce navigateur ne propose pas les notifications. Sur iPhone, ajoute d\u2019abord DailyUp à l\u2019écran d\u2019accueil, puis rouvre l\u2019app depuis son icône.'
+      : 'Le téléphone bloque les notifications pour cette app. Pour les réactiver : <b>iPhone</b> : Réglages → Notifications → DailyUp. <b>Android / Chrome</b> : touche le cadenas (ou ⋮) à côté de l\u2019adresse → Autorisations → Notifications → Autoriser. Puis reviens ici.';
+  };
+  card.querySelectorAll('.rem-mode [data-mode]').forEach(b => b.addEventListener('click', async () => {
+    const cur = await getReminders(); cur.mode = b.dataset.mode; cur.lastFired = {}; await saveReminders(cur);
+    renderRemindersCard(card); checkReminders().catch(() => {});
+  }));
+  card.querySelector('#rem-perm')?.addEventListener('click', async () => {
+    const st = await askPermission();
+    await renderRemindersCard(card);
+    if (st === 'denied' || st === 'unsupported') showHelp(st);
+  });
+  card.querySelector('#rem-auto')?.addEventListener('click', async () => {
+    const cur = await getReminders();
+    cur.mode = 'auto'; cur.work.on = true; cur.sleep.on = true; cur.lastFired = {};
+    await saveReminders(cur);
+    const st = ('Notification' in window && Notification.permission === 'default') ? await askPermission() : (('Notification' in window) ? Notification.permission : 'unsupported');
+    await renderRemindersCard(card);
+    if (st === 'denied' || st === 'unsupported') showHelp(st);
+    checkReminders().catch(() => {});
+  });
   card.querySelectorAll('.rem-row[data-kind]').forEach(row => {
     const k = row.dataset.kind;
     const save = async () => {
       const cur = await getReminders();
       cur[k].on = row.querySelector('.rem-on').checked;
-      cur[k].time = row.querySelector('.rem-time').value || REMINDER_DEFS[k].def;
+      if (cur.mode !== 'auto') cur[k].time = row.querySelector('.rem-time').value || REMINDER_DEFS[k].def;
       delete cur.lastFired[k];
       await saveReminders(cur);
       if (cur[k].on && 'Notification' in window && Notification.permission === 'default') {
-        try { await Notification.requestPermission(); } catch (e) {}
+        await askPermission();
         renderRemindersCard(card);
       }
       checkReminders().catch(() => {});
     };
     row.querySelectorAll('input').forEach(i => i.addEventListener('change', save));
-  });
-  card.querySelector('#rem-perm')?.addEventListener('click', async () => {
-    try { await Notification.requestPermission(); } catch (e) {}
-    renderRemindersCard(card);
   });
   card.querySelector('#rem-add').addEventListener('click', () => openNotificationModal(() => renderRemindersCard(card)));
   card.querySelectorAll('.rem-del').forEach(btn => btn.addEventListener('click', async () => {
