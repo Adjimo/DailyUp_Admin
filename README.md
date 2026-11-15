@@ -394,3 +394,10 @@ Les données vivent uniquement dans le navigateur. Profil → Sauvegarde → Exp
 ### v4.62
 - **Aujourd'hui** : la grille des matières de la case Travail occupe toute la largeur de la case (marges gauche et droite égales) ; la dernière matière seule sur sa ligne garde une demi-largeur, à gauche (v4.63).
 - SW `orion-v134`, `APP_VERSION` 4.63.
+
+### v5.0 — Notifications personnalisées (jours au choix)
+- **Même affichage que les rappels classiques** : chaque notification ajoutée est une rangée identique (icône cloche, motif, heure modifiable au même format, case à cocher pour l'activer / la couper). Sous le motif, une ligne résume les jours (« Tous les jours », « Week-end · chaque semaine », « Mer 18/11 · Lun 23/11 »). Toucher le motif rouvre la fenêtre en mode **Modifier** (avec « Supprimer »).
+- **Fenêtre Ajouter / Modifier** (`openNotificationModal` dans `features/backup.js`) : motif (+ raccourcis), heure, **pastilles L M M J V S D** (un ou plusieurs jours), raccourcis « Tous les jours / Semaine / Week-end », case « Répéter chaque semaine » et résumé en direct.
+- **Modèle** (meta `customReminders`) : `{ id, label, time, days: [0..6, lundi = 0], repeat, on, pending, lastFired }`. `repeat = true` : part chaque semaine les jours choisis. `repeat = false` : part une seule fois à la prochaine occurrence de chaque jour choisi (`pending`, calculé par `nextDatesFor`), puis la notification disparaît. Les anciennes notifications `{ daily, date }` sont converties à la lecture (`normCustom`), y compris depuis une sauvegarde importée.
+- Toujours sans serveur push : elles partent quand l'app est ouverte ou récemment en arrière-plan (rattrapage de 90 min).
+- `APP_VERSION` 5.0 et SW `dailyup-v5-0` inchangés (versions utilisateur et admin nommées 5.0).

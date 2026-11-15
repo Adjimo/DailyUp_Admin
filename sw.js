@@ -4,6 +4,7 @@
 // et se met à jour automatiquement dès qu'une nouvelle version est déployée.
 // ============================================================================
 
+// v5.0 : notifications personnalisées (jours au choix, répétition hebdomadaire ou unique)
 const VERSION = 'dailyup-v5-0';
 // Cache des bibliothèques externes (MapLibre, Chart.js, polices) : jamais supprimé lors d'une mise à jour
 // de l'app, pour que la carte et les graphiques marchent hors ligne dès la 1re ouverture en ligne.

@@ -2033,3 +2033,14 @@ input[type="checkbox"]:checked { background-color: var(--accent); border-color: 
 .pl-block-row { grid-template-columns: 12px 84px 1fr 1fr 36px; }
 .pl-block-row input[type=time], .pl-block-row select { padding: 7px 4px; font-size: .84rem; }
 .pl-block-row .btn.sm { padding: 6px; width: 36px; }
+
+/* Notifications personnalisées : même rangée que les rappels classiques + choix des jours */
+.rem-edit { cursor: pointer; }
+.rem-sub { display: block; margin-top: 2px; font-size: 0.72rem; color: var(--text-mute); }
+.nt-time { color-scheme: dark; }
+:root[data-theme="light"] .nt-time { color-scheme: light; }
+.nt-days { margin: 4px 0 10px; gap: 5px; justify-content: space-between; }
+.nt-days .ob-pill { flex: 1; width: auto; height: auto; max-width: 44px; aspect-ratio: 1; padding: 0; }
+.nt-chip.on { border-color: var(--accent); color: var(--gold); }
+.nt-del { color: var(--danger); display: inline-flex; align-items: center; gap: 6px; }
+.nt-del .ico { width: 14px; height: 14px; }
