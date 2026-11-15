@@ -22,35 +22,53 @@ const fmtShort = (k) => parseKey(k).toLocaleDateString('fr-FR', { day: 'numeric'
 const hhmm = (t) => t.replace(':00', ' h').replace(':', ' h ');
 const range = (a, b) => `${hhmm(a)} – ${hhmm(b)}`;
 
-function eventCard(ev, onTap) {
+// Hauteur proportionnelle à la durée, mais compressée (plancher / plafond) pour garder une journée lisible.
+const spanMin = (start, end) => Math.max(0, (end ? toMin(end) : toMin(start) + 60) - toMin(start));
+const hCard = (min) => Math.round(Math.min(150, Math.max(58, 34 + min * 0.45)));
+const hFree = (min) => Math.round(Math.min(150, Math.max(46, 30 + min * 0.4)));
+const hPause = (min) => Math.round(Math.min(52, Math.max(30, 22 + min * 0.2)));
+const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
+const live = (day, start, end) => day.date === todayKey() && nowMin() >= toMin(start) && nowMin() < (end ? toMin(end) : toMin(start) + 60);
+
+function timeCol(start, end) {
+  return el('div', { class: 'pl-time' }, [el('span', {}, hhmm(start)), el('span', { class: 'pl-time-end' }, end ? hhmm(end) : '')]);
+}
+
+function eventCard(ev, onTap, day) {
   const meta = [ev.teacher, ev.room ? `salle ${ev.room}` : null].filter(Boolean).join(' · ');
+  const min = spanMin(ev.start, ev.end);
   const dur = ev.type === 'ds' ? (ev.hours ? `${ev.hours} h` : 'durée à préciser') : null;
-  return el('div', { class: `pl-card pl-${ev.type} pl-tap`, onclick: () => onTap(ev) }, [
-    el('div', { class: 'pl-time' }, [el('span', {}, hhmm(ev.start)), el('span', { class: 'pl-time-end' }, ev.end ? hhmm(ev.end) : '')]),
+  const isLive = live(day, ev.start, ev.end);
+  return el('div', { class: `pl-card pl-${ev.type} pl-tap${isLive ? ' pl-now' : ''}`, style: `min-height:${hCard(min)}px`, onclick: () => onTap(ev) }, [
+    timeCol(ev.start, ev.end),
     el('div', { class: 'pl-body' }, [
-      el('div', { class: 'pl-title' }, [ev.title, dur ? el('span', { class: 'pl-chip' }, dur) : null, ev.modified ? el('span', { class: 'pl-chip' }, 'modifié') : null]),
-      meta ? el('div', { class: 'pl-meta' }, meta) : null
+      el('div', { class: 'pl-title' }, [ev.title, dur ? el('span', { class: 'pl-chip' }, dur) : null, ev.modified ? el('span', { class: 'pl-chip' }, 'modifié') : null, isLive ? el('span', { class: 'pl-chip pl-chip-live' }, 'en cours') : null]),
+      meta ? el('div', { class: 'pl-meta' }, meta) : null,
+      min >= 75 ? el('div', { class: 'pl-dur' }, formatDuration(min)) : null
     ])
   ]);
 }
 
-function freeCard(b) {
+function freeCard(b, onTap, day) {
   const min = toMin(b.end) - toMin(b.start);
-  return el('div', { class: 'pl-card pl-free' }, [
-    el('div', { class: 'pl-time' }, [el('span', {}, hhmm(b.start)), el('span', { class: 'pl-time-end' }, hhmm(b.end))]),
-    el('div', { class: 'pl-body' }, [el('div', { class: 'pl-title' }, ['Travail personnel', el('span', { class: 'pl-chip' }, formatDuration(min))])])
+  const isLive = live(day, b.start, b.end);
+  return el('div', { class: `pl-card pl-free${b.ev ? ' pl-tap' : ''}${isLive ? ' pl-now' : ''}`, style: `min-height:${hFree(min)}px`, onclick: b.ev ? () => onTap(b.ev) : null }, [
+    timeCol(b.start, b.end),
+    el('div', { class: 'pl-body' }, [el('div', { class: 'pl-title' }, [b.title || 'Travail personnel', el('span', { class: 'pl-chip' }, formatDuration(min))])])
   ]);
 }
 
-function pauseCard(b) {
-  return el('div', { class: 'pl-card pl-pause' }, [
-    el('div', { class: 'pl-time' }, [el('span', {}, hhmm(b.start)), el('span', { class: 'pl-time-end' }, hhmm(b.end))]),
-    el('div', { class: 'pl-body' }, [el('div', { class: 'pl-title' }, 'Pause repas')])
+// Pause : pas de boîte, une simple bande en fond (modifiable au toucher comme les autres créneaux).
+function pauseCard(p, onTap) {
+  const min = spanMin(p.start, p.end);
+  return el('div', { class: 'pl-card pl-pause pl-tap', style: `min-height:${hPause(min)}px`, onclick: () => onTap(p) }, [
+    timeCol(p.start, p.end),
+    el('div', { class: 'pl-body' }, [el('div', { class: 'pl-title' }, [p.title || 'Pause repas', p.modified ? el('span', { class: 'pl-chip' }, 'modifié') : null])])
   ]);
 }
 
 function dayList(day, mode, onTap) {
-  const items = [...day.events.map(e => ({ t: toMin(e.start), node: eventCard(e, onTap) })), ...day.free.map(b => ({ t: toMin(b.start), node: freeCard(b) })), ...day.pauses.map(b => ({ t: toMin(b.start), node: pauseCard(b) }))]
+  const items = [...day.events.map(e => ({ t: toMin(e.start), node: eventCard(e, onTap, day) })), ...day.free.map(b => ({ t: toMin(b.start), node: freeCard(b, onTap, day) })), ...day.pauses.map(p => ({ t: toMin(p.start), node: pauseCard(p, onTap) }))]
     .sort((a, b) => a.t - b.t).map(x => x.node);
   const wrap = el('div', { class: 'pl-list' });
   const note = day.info.holiday ? `Jour férié · ${day.info.holiday}` : day.info.vacation ? `Vacances · ${day.info.vacation}` : null;
@@ -127,10 +145,23 @@ function openEditor(ev, week, rerender) {
   const inDay = el('select', {}, DAY_LABELS.map((l, i) => el('option', i === dayIdx ? { value: i + 1, selected: 'selected' } : { value: i + 1 }, l)));
   const inStart = el('input', { type: 'time', value: cur.start || '' });
   const inEnd = el('input', { type: 'time', value: cur.end || '' });
-  const curType = cur.type || 'autre';
-  const inType = el('select', {}, PLAN_CATS.filter(c => c.key !== 'libre').map(c => el('option', c.key === curType ? { value: c.key, selected: 'selected' } : { value: c.key }, c.label)));
+  let curCat = PLAN_CATS.some(c => c.key === cur.type) ? cur.type : 'autre';
+  // Catégories : pastille de couleur à gauche du nom ; les champs proposés dépendent de la catégorie.
+  const catBox = el('div', { class: 'pl-cats', role: 'radiogroup', 'aria-label': 'Catégorie' }, PLAN_CATS.map(c => el('button', {
+    type: 'button', role: 'radio', 'data-k': c.key, class: 'pl-cat' + (c.key === curCat ? ' on' : ''), 'aria-checked': String(c.key === curCat), onclick: () => setCat(c.key)
+  }, [el('span', { class: 'pl-cat-dot', style: `background:var(--ev-${c.key})` }), c.label])));
   const inTeacher = el('input', { type: 'text', value: cur.teacher || '', placeholder: 'Professeur' });
   const inRoom = el('input', { type: 'text', value: cur.room || '', placeholder: 'Salle' });
+  const fTeacher = field('Professeur', inTeacher), fRoom = field('Salle', inRoom);
+  const showsTeacher = () => curCat === 'cours' || curCat === 'colle';
+  const showsRoom = () => curCat === 'cours' || curCat === 'colle' || curCat === 'ds';
+  function setCat(k) {
+    const prev = curCat; curCat = k;
+    catBox.querySelectorAll('.pl-cat').forEach(b => { const on = b.dataset.k === k; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
+    fTeacher.hidden = !showsTeacher(); fRoom.hidden = !showsRoom();
+    if (k === 'pause' && !inTitle.value.trim()) inTitle.value = 'Pause repas';
+    else if (prev === 'pause' && inTitle.value.trim() === 'Pause repas' && k !== 'pause') inTitle.value = '';
+  }
   const recurring = isNew || !!ev.recurKey;
   let scope = 'week';
   const scopeBox = recurring ? el('div', { class: 'pl-scope' }, [
@@ -139,7 +170,7 @@ function openEditor(ev, week, rerender) {
   ]) : null;
   function setScope(v, e) { scope = v; scopeBox.querySelectorAll('.pl-seg').forEach(b => b.classList.toggle('active', b === e.currentTarget)); }
 
-  const fields = () => ({ type: inType.value, day: Number(inDay.value), start: inStart.value, end: inEnd.value, title: inTitle.value.trim(), teacher: inTeacher.value.trim() || null, room: inRoom.value.trim() || null });
+  const fields = () => ({ type: curCat, day: Number(inDay.value), start: inStart.value, end: inEnd.value, title: inTitle.value.trim(), teacher: showsTeacher() ? (inTeacher.value.trim() || null) : null, room: showsRoom() ? (inRoom.value.trim() || null) : null });
   const stamp = () => new Date().toISOString();
   const done = () => { close(); rerender(); };
 
@@ -169,15 +200,16 @@ function openEditor(ev, week, rerender) {
       el('button', { class: 'gpx-preview-close', 'aria-label': 'Fermer', onclick: close, html: iconHtml('close') })
     ]),
     el('div', { class: 'pl-form' }, [
-      field('Intitulé', inTitle), field('Catégorie (couleur)', inType), field('Jour', inDay),
+      el('div', { class: 'pl-field' }, [el('span', {}, 'Catégorie'), catBox]), field('Intitulé', inTitle), field('Jour', inDay),
       el('div', { class: 'pl-row2' }, [field('Début', inStart), field('Fin', inEnd)]),
-      field('Professeur', inTeacher), field('Salle', inRoom),
+      fTeacher, fRoom,
       scopeBox ? el('div', { class: 'pl-hint' }, 'S\u2019applique à :') : null, scopeBox,
       el('button', { class: 'btn full', onclick: save }, 'Enregistrer'),
       !isNew ? el('button', { class: 'btn full danger', onclick: remove }, 'Supprimer') : null,
       (!isNew && ev.modified) ? el('button', { class: 'btn full', onclick: revert }, 'Rétablir l\u2019original') : null
     ])
   ]);
+  fTeacher.hidden = !showsTeacher(); fRoom.hidden = !showsRoom();
   overlay.appendChild(modal);
   document.body.appendChild(overlay);
 }
