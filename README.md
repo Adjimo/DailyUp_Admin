@@ -401,3 +401,4 @@ Les données vivent uniquement dans le navigateur. Profil → Sauvegarde → Exp
 - **Modèle** (meta `customReminders`) : `{ id, label, time, days: [0..6, lundi = 0], repeat, on, pending, lastFired }`. `repeat = true` : part chaque semaine les jours choisis. `repeat = false` : part une seule fois à la prochaine occurrence de chaque jour choisi (`pending`, calculé par `nextDatesFor`), puis la notification disparaît. Les anciennes notifications `{ daily, date }` sont converties à la lecture (`normCustom`), y compris depuis une sauvegarde importée.
 - Toujours sans serveur push : elles partent quand l'app est ouverte ou récemment en arrière-plan (rattrapage de 90 min).
 - `APP_VERSION` 5.0 et SW `dailyup-v5-0` inchangés (versions utilisateur et admin nommées 5.0).
+- **Rappels allégés** : plus de phrases explicatives (modes Automatique et Heure fixe) ; deux rangées « Fin de travail » et « Coucher − 15 min », notes en petit (`.rem-note`).
