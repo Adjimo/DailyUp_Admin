@@ -1,5 +1,5 @@
 // Page Quêtes
-import { addDays } from '../core/calendar.js';
+import { addDays, isRestDay } from '../core/calendar.js';
 import { dayKeyFromDate, formatDate, prevWeekKey, todayKey, weekKey, weekStartDate } from '../core/dates.js';
 import { GHOST_BEFORE, dbAll, dbGet } from '../core/db.js';
 
@@ -88,6 +88,7 @@ export async function renderDayDashboard(root, afterRender) {
   const slept = !!(await getSleepLog())[dateKey];       // case cochée = couché avant 23h30 la veille au soir
   const actualMinutes = workLog?.totalMinutes || 0;
   const goalHours = await dailyGoalHours(dateKey);          // % du temps libre du jour (cf. work-goals.js)
+  const rest = isRestDay(dateKey);                          // jour de concours : repos, objectif nul
   const wi = computeWorkXp(actualMinutes, goalHours);
   const progress = goalHours > 0 ? Math.min(1, actualMinutes / (goalHours * 60)) : 0;
   // On affiche le sport du jour pour required ET weekend (sortie longue flexible).
@@ -128,7 +129,18 @@ export async function renderDayDashboard(root, afterRender) {
       </div>`;
 
   let workBlock = '';
-  if (goalHours > 0) {
+  if (rest) {
+    // Concours : aucun objectif de travail ; la saisie reste possible, elle compte en bonus sur les caractéristiques.
+    workBlock = `
+      <div class="block work">
+        <div class="block-icon">${iconHtml('lotus')}</div>
+        <div class="block-body">
+          <div class="block-title">Travail · repos</div>
+          <div class="dim text-xs mt-1">Pas d’objectif pendant les concours. Ce que tu travailles compte en bonus${actualMinutes ? ` · ${formatMinutes(actualMinutes)} saisis` : ''}.</div>
+        </div>
+        <div class="subjects-grid" id="subjects-grid"></div>
+      </div>`;
+  } else if (goalHours > 0) {
     const workDone = wi.ratio >= 1;
     workBlock = `
       <div class="block work ${workDone ? 'done' : ''}">
@@ -204,7 +216,7 @@ export async function renderDayDashboard(root, afterRender) {
 
   afterRender?.(dateKey);
 
-  if (goalHours > 0) {
+  if (goalHours > 0 || rest) {
     const grid = root.querySelector('#subjects-grid');
     // Matières = sous-compétences de catégorie travail (Maths, Physique, SI / Info, Anglais, Français) ; « Autre » seulement s'il a déjà du temps saisi.
     const keys = [...WORK_KEYS, ...((workLog?.bySubject?.autre || 0) > 0 ? ['autre'] : [])];

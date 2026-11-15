@@ -21,6 +21,7 @@ const clampPct = (x) => Math.max(0, Math.min(100, x));
 function shortValue(info) {
   if (!info) return '';
   if (info.excused) return 'justifiée';
+  if (info.rest) return info.value ? `Repos · ${formatMinutes(info.value)} (bonus)` : 'Repos · pas d’objectif';
   if (info.kind === 'minutes') return `${formatMinutes(info.value || 0)} / ${formatHours((info.goal || 0) / 60)}`;
   if (info.kind === 'pct') return `${Math.round((info.value || 0) * 100)} %`;
   return info.goal > 0 ? `${info.value ?? 0} / ${info.goal}` : '';
@@ -46,7 +47,7 @@ function partEl(c) {
       <span class="hn-pct">${ok ? Math.round(Math.min(ratio, 999)) + '%' : ''}</span>
     </div>
     <div class="hn-bar"><div class="hn-fill" style="width:${Math.max(0, Math.min(100, ratio))}%"></div></div>
-    <div class="hn-info"><span class="hn-val">${ok ? shortValue(c.info) : ''}</span>${parts}</div>`;
+    <div class="hn-info"><span class="hn-val">${ok || c.info?.rest ? shortValue(c.info) : ''}</span>${parts}</div>`;
   return row;
 }
 

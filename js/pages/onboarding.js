@@ -7,6 +7,7 @@ import { dbGet, dbPut } from '../core/db.js';
 import { iconHtml } from '../ui/icons.js';
 import { navigate } from '../ui/router.js';
 import { DEFAULT_HOURS, prefsNow, savePrefs } from '../features/prefs.js';
+import { seedReminderTimesFromMonday } from '../features/backup.js';
 import { DAY_LABELS, buildWeek, formatDuration } from '../features/planning.js';
 import { getCaracSettings, recomputeCaracs, saveCaracSettings } from '../features/caracs.js';
 import { hoursEditor } from './hours-editor.js';
@@ -36,6 +37,7 @@ export async function startOnboarding() {
 
   const finish = async () => {
     await savePrefs({ sport: draft.sport, gamify: draft.gamify, hours: draft.hours, colles: true, who: draft.who, onboarded: true });
+    await seedReminderTimesFromMonday().catch(() => {});
     if (draft.workPct !== cfg.workPct) await saveCaracSettings({ workPct: draft.workPct }).catch(() => {});
     const pseudo = draft.name.trim();
     if (pseudo) { const prof = await dbGet('profile', 'me'); if (prof) { prof.name = pseudo.slice(0, 24); await dbPut('profile', prof); } }

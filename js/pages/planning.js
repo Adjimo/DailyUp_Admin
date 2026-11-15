@@ -9,9 +9,9 @@ import { DAY_LABELS, buildWeek, formatDuration, loadOverrides, removeOverride, s
 
 import { addBtn, el } from '../ui/helpers.js';
 
-import { getCaracSettings } from '../features/caracs.js';
+import { getCaracSettings, recomputeCaracs } from '../features/caracs.js';
 import { weekGoalsFor } from '../features/work-goals.js';
-import { PLAN_CATS, PLAN_SWATCHES, applyPlanColors, planColor, prefsNow, savePrefs } from '../features/prefs.js';
+import { DEFAULT_PERIOD_BLOCKS, PLAN_CATS, PLAN_SWATCHES, applyPlanColors, periodBlocksFor, planColor, prefsNow, savePrefs } from '../features/prefs.js';
 
 
 const view = { monday: null, day: null };
@@ -71,9 +71,9 @@ function dayList(day, mode, onTap) {
   const items = [...day.events.map(e => ({ t: toMin(e.start), node: eventCard(e, onTap, day) })), ...day.free.map(b => ({ t: toMin(b.start), node: freeCard(b, onTap, day) })), ...day.pauses.map(p => ({ t: toMin(p.start), node: pauseCard(p, onTap) }))]
     .sort((a, b) => a.t - b.t).map(x => x.node);
   const wrap = el('div', { class: 'pl-list' });
-  const note = day.info.holiday ? `Jour férié · ${day.info.holiday}` : day.info.vacation ? `Vacances · ${day.info.vacation}` : null;
+  const note = day.period ? null : day.info.holiday ? `Jour férié · ${day.info.holiday}` : day.info.vacation ? `Vacances · ${day.info.vacation}` : null;
   if (note) wrap.appendChild(el('div', { class: 'pl-note' }, note));
-  if (!day.events.length && !note && mode !== 'normal') wrap.appendChild(el('div', { class: 'pl-note' }, 'Pas de cours : journée libre.'));
+  if (!day.events.length && !note && !day.period && mode !== 'normal') wrap.appendChild(el('div', { class: 'pl-note' }, 'Pas de cours : journée libre.'));
   items.forEach(n => wrap.appendChild(n));
   return wrap;
 }
@@ -109,7 +109,11 @@ export async function renderPlanning(root) {
   // avant la 1re semaine « dynamique », l'ancien objectif fixe).
   const goals = await weekGoalsFor(week.monday);
   const pct = (await getCaracSettings()).workPct;
-  root.appendChild(el('div', { class: 'pl-stats' }, [
+  const allRest = week.days.every(d => d.period?.kind === 'rest');   // semaine de concours : repos
+  root.appendChild(el('div', { class: 'pl-stats' }, allRest ? [
+    el('div', { class: 'pl-stat' }, [el('span', { class: 'pl-stat-l' }, 'Période'), el('b', { class: 'pl-stat-v' }, 'Concours')]),
+    el('div', { class: 'pl-stat' }, [el('span', { class: 'pl-stat-l' }, 'Travail attendu'), el('b', { class: 'pl-stat-v accent' }, 'Repos · aucun')])
+  ] : [
     el('div', { class: 'pl-stat' }, [el('span', { class: 'pl-stat-l' }, 'Temps libre'), el('b', { class: 'pl-stat-v' }, formatDuration(week.freeMinutes))]),
     el('div', { class: 'pl-stat' }, [el('span', { class: 'pl-stat-l' }, goals.dynamic ? `Travail attendu · ${pct} %` : 'Travail attendu · objectif fixe'), el('b', { class: 'pl-stat-v accent' }, formatDuration(Math.round(goals.total)))])
   ]));
@@ -117,7 +121,7 @@ export async function renderPlanning(root) {
     class: `pl-day${i === view.day ? ' active' : ''}${d.date === today ? ' today' : ''}`,
     onclick: () => { view.day = i; root.innerHTML = ''; renderPlanning(root); }
   }, [el('span', {}, d.label.slice(0, 3)), el('b', {}, String(parseKey(d.date).getDate())),
-      el('i', { class: (d.events.length || d.info.vacation || d.info.holiday) ? 'on' : '' })]))));
+      el('i', { class: (d.events.length || (d.period?.kind !== 'rest' && (d.info.vacation || d.info.holiday))) ? 'on' : '' })]))));
 
   root.appendChild(el('div', { class: 'pl-legend' }, PLAN_CATS.map(c => [c.label, `var(--ev-${c.key})`]).map(([l, c]) => el('span', { style: `--c:${c}` }, l))));
 
@@ -129,6 +133,8 @@ export async function renderPlanning(root) {
       ])))
     ]));
   }
+  const banner = periodBanner(week.days[view.day], rerender);
+  if (banner) root.appendChild(banner);
   root.appendChild(dayList(week.days[view.day], week.mode, (ev) => openEditor(ev, week, rerender)));
   root.appendChild(addBtn('Ajouter un créneau', () => openEditor(null, week, rerender), 'pl-add'));
 }
@@ -243,5 +249,75 @@ function openColors(rerender) {
       el('button', { class: 'gpx-preview-close', 'aria-label': 'Fermer', onclick: close, html: iconHtml('close') })
     ]), body
   ]));
+  document.body.appendChild(overlay);
+}
+
+// ── Périodes à horaires particuliers : bandeau du jour + réglage des horaires ───
+// Concours : repos, aucun objectif. Vacances / révisions : planning simplifié, modèle commun + réglage jour par jour.
+function periodBanner(day, rerender) {
+  const per = day.period;
+  if (!per) return null;
+  if (per.kind === 'rest') {
+    return el('div', { class: 'pl-banner' }, [
+      el('div', { class: 'pl-banner-t' }, 'Concours · repos'),
+      el('div', { class: 'pl-banner-s' }, 'Aucun objectif de travail. Ce que tu travailles malgré tout compte en bonus.')
+    ]);
+  }
+  const hasDay = !!prefsNow().periodDays?.[day.date];
+  return el('div', { class: 'pl-banner' }, [
+    el('div', { class: 'pl-banner-t' }, `${per.label} · horaires simplifiés`),
+    el('div', { class: 'pl-banner-s' }, hasDay ? 'Ce jour a ses propres horaires.' : 'Le modèle commun à toutes les vacances et révisions s’applique.'),
+    el('div', { class: 'pl-banner-a' }, [
+      el('button', { class: 'btn sm', onclick: () => openBlocks({ title: 'Horaires de la période', sub: 'S’appliquent à tous les jours des vacances et des révisions (sauf ceux que tu as modifiés un par un).', blocks: prefsNow().periodTemplate || DEFAULT_PERIOD_BLOCKS, save: async (b) => { await savePrefs({ periodTemplate: b }); }, reset: async () => { await savePrefs({ periodTemplate: null }); }, resetLabel: 'Revenir aux horaires par défaut', rerender }) }, 'Horaires de la période'),
+      el('button', { class: 'btn sm', onclick: () => openBlocks({ title: 'Modifier ce jour', sub: `Uniquement le ${parseKey(day.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}.`, blocks: periodBlocksFor(day.date), save: async (b) => { await savePrefs({ periodDays: { ...prefsNow().periodDays, [day.date]: b } }); }, reset: hasDay ? async () => { const d = { ...prefsNow().periodDays }; delete d[day.date]; await savePrefs({ periodDays: d }); } : null, resetLabel: 'Rétablir le modèle commun', rerender }) }, 'Modifier ce jour')
+    ])
+  ]);
+}
+
+// Éditeur de blocs : travail / pause. Tout ce qui est après le dernier bloc est de la soirée libre (ni affichée, ni comptée).
+function openBlocks({ title, sub, blocks, save, reset, resetLabel, rerender }) {
+  let rows = blocks.map(b => ({ ...b }));
+  const body = el('div', { class: 'pl-form' });
+  const close = () => overlay.remove();
+  const total = () => rows.filter(r => r.kind === 'work' && r.start && r.end && r.end > r.start).reduce((t, r) => t + toMin(r.end) - toMin(r.start), 0);
+  const msg = el('div', { class: 'pl-blocks-msg dim text-xs' });
+  const draw = () => {
+    body.innerHTML = '';
+    body.appendChild(el('div', { class: 'dim text-xs' }, sub));
+    rows.forEach((r, i) => {
+      const kind = el('select', { 'aria-label': 'Type' }, [el('option', r.kind === 'work' ? { value: 'work', selected: 'selected' } : { value: 'work' }, 'Travail'), el('option', r.kind === 'pause' ? { value: 'pause', selected: 'selected' } : { value: 'pause' }, 'Pause')]);
+      const st = el('input', { type: 'time', value: r.start, 'aria-label': 'Début' }), en = el('input', { type: 'time', value: r.end, 'aria-label': 'Fin' });
+      kind.addEventListener('change', () => { r.kind = kind.value; upd(); });
+      st.addEventListener('change', () => { r.start = st.value; upd(); }); en.addEventListener('change', () => { r.end = en.value; upd(); });
+      body.appendChild(el('div', { class: 'pl-block-row' }, [
+        el('span', { class: 'pl-cat-dot', style: `background:var(--ev-${r.kind === 'work' ? 'libre' : 'pause'})` }),
+        kind, st, en,
+        el('button', { type: 'button', class: 'btn ghost sm', 'aria-label': 'Supprimer ce bloc', onclick: () => { rows.splice(i, 1); draw(); }, html: iconHtml('close') })
+      ]));
+    });
+    body.appendChild(el('button', { type: 'button', class: 'btn full', onclick: () => { const last = rows[rows.length - 1]; const s0 = last ? last.end : '08:00'; const e0 = s0 < '22:00' ? fromMinSafe(Math.min(toMin(s0) + 120, 23 * 60 + 59)) : '23:59'; rows.push({ kind: 'work', start: s0, end: e0 }); draw(); } }, '+ Ajouter un bloc'));
+    body.appendChild(msg);
+    upd();
+    body.appendChild(el('div', { class: 'pl-blocks-note dim text-xs' }, 'Après le dernier bloc : soirée libre (non comptée comme travail).'));
+    body.appendChild(el('button', { class: 'btn primary full', onclick: submit }, 'Enregistrer'));
+    if (reset) body.appendChild(el('button', { class: 'btn full', onclick: async () => { await reset(); finish(); } }, resetLabel));
+  };
+  const upd = () => { msg.textContent = `Temps de travail : ${formatDuration(total())}`; msg.classList.remove('pl-bad-t'); };
+  const fromMinSafe = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  const finish = () => { close(); recomputeCaracs().catch(() => {}); rerender(); };
+  const submit = async () => {
+    const ok = rows.every(r => r.start && r.end && r.end > r.start);
+    const sorted = [...rows].sort((a, b) => a.start.localeCompare(b.start));
+    const overlap = sorted.some((r, i) => i > 0 && r.start < sorted[i - 1].end);
+    if (!ok || overlap) { msg.textContent = !ok ? 'Chaque bloc doit finir après son début.' : 'Les blocs ne doivent pas se chevaucher.'; msg.classList.add('pl-bad-t'); return; }
+    await save(sorted.map(r => ({ start: r.start, end: r.end, kind: r.kind })));
+    finish();
+  };
+  const overlay = el('div', { class: 'gpx-preview-overlay', onclick: (e) => { if (e.target === overlay) close(); } });
+  overlay.appendChild(el('div', { class: 'gpx-preview-modal' }, [
+    el('div', { class: 'gpx-preview-head' }, [el('div', { class: 'gpx-preview-title' }, title), el('button', { class: 'gpx-preview-close', 'aria-label': 'Fermer', onclick: close, html: iconHtml('close') })]),
+    body
+  ]));
+  draw();
   document.body.appendChild(overlay);
 }
