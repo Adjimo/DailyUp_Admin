@@ -1991,3 +1991,32 @@ input[type="checkbox"]:checked { background-color: var(--accent); border-color: 
 
 /* ── v5 · Splash de la version administrateur ── */
 .splash-admin { margin-top: 6px; font-weight: 600; font-size: 1.05rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+
+/* ── v5 · Planning : cartes proportionnelles à la durée (hauteur compressée), pauses sans boîte ── */
+.pl-list { gap: 8px; }
+.pl-card { align-items: stretch; position: relative; }
+.pl-time { justify-content: space-between; }
+.pl-body { display: flex; flex-direction: column; justify-content: flex-start; }
+.pl-dur { margin-top: auto; align-self: flex-end; padding-top: 4px; font-family: var(--font-mono); font-size: .72rem; color: color-mix(in srgb, var(--ev, var(--text-mute)) 55%, var(--text-mute)); }
+.pl-card.pl-now { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent); }
+.pl-chip-live { color: var(--on-accent); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+.pl-card.pl-pause { --ev: var(--ev-pause); border: none; border-radius: var(--r-sm); background: color-mix(in srgb, var(--ev-pause) 12%, transparent); opacity: 1; padding: 4px 14px; align-items: center; }
+.pl-card.pl-pause .pl-time { flex-direction: row; gap: 6px; min-width: 0; font-size: .7rem; color: color-mix(in srgb, var(--ev-pause) 60%, var(--text-mute)); justify-content: flex-start; align-items: center; width: 92px; flex: none; }
+.pl-card.pl-pause .pl-time-end::before { content: '– '; }
+.pl-card.pl-pause .pl-body { justify-content: center; }
+.pl-pause .pl-title { font-weight: 500; font-size: .82rem; color: color-mix(in srgb, var(--ev-pause) 55%, var(--text-mute)); }
+.pl-card.pl-free .pl-time { flex-direction: column; }
+
+/* ── v5 · Éditeur de créneau : catégories avec pastille de couleur ── */
+.pl-field[hidden] { display: none; }
+.pl-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pl-cat { display: flex; align-items: center; gap: 8px; padding: 9px 10px; background: var(--bg-2); border: 1px solid var(--border-strong); border-radius: var(--r-sm); color: var(--text-dim); font-size: .88rem; text-align: left; }
+.pl-cat.on { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 12%, var(--bg-2)); box-shadow: 0 0 0 1px var(--accent); }
+.pl-cat-dot { width: 12px; height: 12px; border-radius: 4px; flex: none; border: 1px solid color-mix(in srgb, var(--text) 25%, transparent); }
+
+/* ── v5 · Tutoriel : icône centrée (le conteneur .ico faisait 1,1em et l'icône débordait vers la droite) ── */
+.ob-ico { display: flex; justify-content: center; }
+.ob-ico .ico { width: 44px; height: 44px; display: inline-flex; }
+.ob-ico svg { width: 44px; height: 44px; }
+.pl-card.pl-pause .pl-time { width: auto; min-width: 118px; white-space: nowrap; }
+.pl-card.pl-pause .pl-time span { white-space: nowrap; }

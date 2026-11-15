@@ -59,6 +59,13 @@ Les données vivent uniquement dans le navigateur. Profil → Sauvegarde → Exp
 
 ## v5.0 (suite)
 
+- **Planning, cartes proportionnelles** : la hauteur de chaque créneau suit sa durée, avec plancher et plafond (journée lisible) ; heure de début en haut et de fin en bas, durée en bas à droite, repère « en cours » sur le créneau du moment.
+- **Pauses repas modifiables** : ce sont maintenant de vrais créneaux (type `pause`, `basePauses()` dans `features/planning.js`) : on les déplace / supprime / rétablit (cette semaine ou toutes les semaines). Elles restent sans boîte, en bande de fond, couleur réglable. Le calcul du temps libre est inchangé par défaut (vérifié sur les 44 semaines) ; déplacer une pause met à jour le temps libre.
+- **Nouvelles pauses** : samedi 19 h 30 – 21 h 30 et dimanche 19 h – 20 h (`DAY_RULES`).
+- **Éditeur de créneau** : toutes les catégories du planning (cours, colle, DS, pause repas, temps libre, autre) avec leur pastille de couleur à gauche ; Professeur + Salle pour cours et colle, Salle seule pour DS, rien pour les autres. Un créneau « Temps libre » ajouté s'ajoute au temps libre.
+- **Tutoriel** : icônes centrées (le conteneur `.ico` était trop étroit).
+- **Version admin** : nom `DailyUp Administrateur` dans `manifest.json` (`name`) et le titre de `index.html` (à appliquer à la main sur le build admin).
+
 - **Version admin** : l'écran de lancement affiche « DailyUp » puis « ADMINISTRATEUR » dessous, et le titre de l'onglet devient « DailyUp Administrateur » (`showSplash` dans `main.js`, selon `IS_ADMIN`). La version utilisateur est inchangée.
 
 - **Tutoriel** : nouvelle 1re page « Comment t'appelles-tu ? » (pseudo, enregistré dans le profil et affiché sur l'accueil) ; correction du « null » affiché en bas de la 1re page (`replaceChildren` recevait `null`).
