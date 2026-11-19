@@ -3,7 +3,7 @@ import { GHOST_BEFORE, dbGet, dbPut } from './core/db.js';
 import { integrateAugustData, maybeAutoBackup, showWeekReportIfDue, startReminderLoop, weeklyXpCheck } from './features/backup.js';
 import { recomputeCaracs } from './features/caracs.js';
 import { ensureTodo } from './features/todo.js';
-import { applyPendingPenalties } from './features/penalties.js';
+import { applyPendingPenalties, setPenaltiesStart } from './features/penalties.js';
 import { backupReminder, ensurePersistentStorage } from './features/storage.js';
 import { recomputeAutoQuests } from './features/quests.js';
 import { initSeed, loadAll } from './features/seed.js';
@@ -16,6 +16,7 @@ import { showToast } from './ui/helpers.js';
 import { hydrateStaticIcons } from './ui/icons.js';
 import { initSwipeNav, navigate } from './ui/router.js';
 import { IS_ADMIN } from './core/state.js';
+import { initJoinDate } from './core/join.js';
 
 export function showSplash() {
   const splash = document.getElementById('splash');
@@ -42,7 +43,9 @@ export async function init() {
   showSplash();
   await loadPrefs();
   applyPrefsToShell();
+  const joinDate = await initJoinDate();   // avant initSeed : distingue une nouvelle installation d'une installation existante
   await initSeed();
+  setPenaltiesStart(joinDate);             // malus et caractéristiques partent de max(1er septembre, arrivée)
   await loadAll();
   ensurePersistentStorage().catch(() => {});
 
