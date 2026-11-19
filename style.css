@@ -2045,3 +2045,11 @@ input[type="checkbox"]:checked { background-color: var(--accent); border-color: 
 .nt-del { color: var(--danger); display: inline-flex; align-items: center; gap: 6px; }
 .nt-del .ico { width: 14px; height: 14px; }
 .rem-note { font-size: 0.72rem; color: var(--text-mute); }
+
+/* Joker : soirée banalisée */
+.pl-card.pl-joker { --ev: var(--gold); border-color: color-mix(in srgb, var(--ev) 45%, var(--border)); border-left-color: var(--ev); background: color-mix(in srgb, var(--ev) 14%, var(--bg-2)); }
+.pl-joker .pl-title { color: color-mix(in srgb, var(--ev) 70%, var(--tint)); }
+.pl-joker .pl-time { color: color-mix(in srgb, var(--ev) 70%, var(--tint)); }
+.pl-joker-note { display: flex; align-items: center; gap: 8px; width: 100%; margin: 0 0 10px; padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--gold) 40%, var(--border)); border-radius: var(--r-sm); background: color-mix(in srgb, var(--gold) 10%, transparent); color: var(--text); font: inherit; font-size: 0.8rem; text-align: left; cursor: pointer; }
+.pl-joker-note .ico { width: 16px; height: 16px; }
+.pl-joker-btn .ico { width: 16px; height: 16px; }
