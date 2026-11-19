@@ -27,7 +27,7 @@ const clean = (v) => ({ ...DEFAULTS, ...(v || {}), v: 1, sport: v?.sport !== fal
 export async function loadPrefs() { if (!cache) cache = clean((await dbGet('meta', KEY))?.value); return cache; }
 export const prefsNow = () => cache || (cache = clean(null));
 export const sportOn = () => prefsNow().sport;
-// Programme de colles choisi (Thomas = groupe 8, Daphné = groupe 11).
+// Programme de colles choisi (Thomas = groupe 8, Daphné = groupe 11, Valentin = groupe 10).
 export const colleProgramNow = () => COLLE_PROGRAMS[prefsNow().who] || COLLE_PROGRAMS.thomas;
 export const gamifyOn = () => prefsNow().gamify;
 
@@ -53,6 +53,7 @@ export const PLAN_CATS = [
   { key: 'colle', label: 'Colle', def: '#C8814A' },
   { key: 'ds',    label: 'DS',    def: '#D95F36' },
   { key: 'pause', label: 'Pause repas', def: '#7A7468' },
+  { key: 'trajet', label: 'Trajet', def: '#6F8089' },   // retour à la maison : comme une pause, hors temps libre de travail
   { key: 'libre', label: 'Temps libre', def: '#6F6859' },
   { key: 'autre', label: 'Autre', def: '#B0705A' }
 ];

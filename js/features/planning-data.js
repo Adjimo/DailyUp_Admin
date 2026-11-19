@@ -89,8 +89,23 @@ export const COLLES_G11 = {
   15: ['M13', 'A3'], 16: ['M10', 'P1'], 17: ['M5', 'A2'], 18: ['M0', 'P6'], 20: ['M8', 'A4']
 };
 
+// Rotation du groupe 10 (Valentin Jehan, 2e de son trio : 2e plage des oraux blancs, M0 = mardi 7h20, M1 = samedi 7h20).
+// Source : planning_2026-2027_5.pdf. La colle de français (F0) tombe la semaine 13.
+export const COLLES_G10 = {
+  0: ['M4', 'A2'], 1: ['M12', 'P4'], 2: ['M7', 'A5'], 3: ['M9', 'P1'], 4: ['M4', 'A3'],
+  5: ['M11', 'P6'], 6: ['M0', 'A5'], 7: ['M3', 'P0'], 8: ['M8', 'A5'], 9: ['M9', 'P3'],
+  10: ['M5', 'A2'], 11: ['M13', 'P4'], 12: ['M8', 'A5'], 13: ['M1', 'P2', 'F0'], 14: ['M9', 'A0'],
+  15: ['M6', 'P5'], 16: ['M2', 'A5'], 17: ['M11', 'P1'], 18: ['M9', 'A1'], 20: ['M0', 'P6']
+};
+
 // Programmes proposés au tutoriel : groupe, rotation de colles et parité du TP ITC (groupes pairs : semaines paires ; impairs : semaines impaires).
 export const COLLE_PROGRAMS = {
   thomas: { label: 'Thomas', group: 8, rotation: COLLES_G8, itcParity: 0 },     // Thomas Bailloux, groupe 8, 1er du trio
-  daphne: { label: 'Daphné', group: 11, rotation: COLLES_G11, itcParity: 1 }    // Daphné Myoux, groupe 11, 1re du trio
+  daphne: { label: 'Daphné', group: 11, rotation: COLLES_G11, itcParity: 1 },   // Daphné Myoux, groupe 11, 1re du trio
+  // Valentin Jehan, groupe 10, 2e du trio : les oraux blancs passent à la 2e plage (`slots` remplace le créneau de COLLE_SLOTS).
+  valentin: { label: 'Valentin', group: 10, rotation: COLLES_G10, itcParity: 0,
+    slots: {
+      M0: { day: 2, note: 'Oral blanc (2e passage, mardi 7h20)' },
+      M1: { day: 6, note: 'Oral blanc (2e passage, samedi 7h20)' }
+    } }
 };

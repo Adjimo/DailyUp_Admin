@@ -34,6 +34,7 @@ import { getRunsGoals, getSleepLog } from './weekly-goals.js';
 import { COLORS } from '../ui/icons.js';
 import { categoryOf } from './competences.js';
 import { sportOn } from './prefs.js';
+import { JOIN_DATE } from '../core/join.js';
 
 // ── Définition des 6 caractéristiques (icônes et couleurs du pack : chaud, sans bleu/violet/vert)
 export const CARACS = [
@@ -84,7 +85,9 @@ export async function getCaracSettings() {
     subjectWeights: { ...DEFAULT_SETTINGS.subjectWeights, ...(clean.subjectWeights || {}) },
     weights: Object.fromEntries(Object.entries(DEFAULT_SETTINGS.weights).map(([k, v]) => [k, { ...v }])),
     // v5 : poids de l'historique (70 %), échelle des scores et pondérations sont fixes (plus modifiables).
-    alpha: DEFAULT_SETTINGS.alpha, scoreZero: DEFAULT_SETTINGS.scoreZero, goalScore: DEFAULT_SETTINGS.goalScore, overScore: DEFAULT_SETTINGS.overScore
+    alpha: DEFAULT_SETTINGS.alpha, scoreZero: DEFAULT_SETTINGS.scoreZero, goalScore: DEFAULT_SETTINGS.goalScore, overScore: DEFAULT_SETTINGS.overScore,
+    // Le calcul démarre le jour d'arrivée (jamais avant le 1er septembre).
+    ...(JOIN_DATE ? { start: JOIN_DATE > DEFAULT_SETTINGS.start ? JOIN_DATE : DEFAULT_SETTINGS.start } : {})
   };
 }
 

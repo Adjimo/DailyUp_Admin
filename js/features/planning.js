@@ -45,7 +45,7 @@ function baseEvents(monday, mode) {
   const idx = weekIndexOf(monday);
   if (mode === 'normal' && idx !== null) {
     if (prefsNow().colles !== false) for (const code of colleProgramNow().rotation[idx] || []) {
-      const s = COLLE_SLOTS[code];
+      const s = { ...COLLE_SLOTS[code], ...(colleProgramNow().slots?.[code] || {}) };   // plage d'oral blanc propre à l'élève (rang dans le trio)
       const date = s.day ? addDays(monday, s.day - 1) : null;
       events.push({
         id: `k:${monday}:${code}`, type: 'colle', subj: s.subject, code, date,
@@ -187,8 +187,9 @@ export async function buildWeek(monday, overrides) {
   for (let i = 0; i < 7; i++) {
     const date = addDays(monday, i);
     const dayAll = all.filter(e => e.date === date && e.start).sort((a, b) => a.start.localeCompare(b.start));
-    const events = dayAll.filter(e => e.type !== 'pause' && e.type !== 'libre');
-    const pauses = dayAll.filter(e => e.type === 'pause');
+    const isPause = (e) => e.type === 'pause' || e.type === 'trajet';   // le trajet compte comme une pause : retiré du temps libre de travail
+    const events = dayAll.filter(e => !isPause(e) && e.type !== 'libre');
+    const pauses = dayAll.filter(isPause);
     const libres = dayAll.filter(e => e.type === 'libre');
     const period = periodOf(date);
     let free;
