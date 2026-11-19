@@ -1,5 +1,5 @@
 // Tutoriel d'inscription (v5) : pages courtes, sans clavier.
-// 0 Pseudo · 1 Sport ? · 2 Gamifier ? · 3 Horaires par jour (coucher + fin de travail) · 4 Volume de travail (%) · 5 Emploi du temps (colles de Thomas ou de Daphné).
+// 0 Pseudo · 1 Sport ? · 2 Gamifier ? · 3 Horaires par jour (coucher + fin de travail) · 4 Volume de travail (%) · 5 Emploi du temps (colles de Thomas, Daphné ou Valentin).
 // Relançable à tout moment depuis Options (bouton admin) sans toucher aux données.
 import { el } from '../ui/helpers.js';
 import { State } from '../core/state.js';
@@ -72,7 +72,7 @@ export async function startOnboarding() {
       upd();
       return el('div', {}, [out, input, est, el('div', { class: 'ob-actions' }, [el('button', { class: 'btn primary', onclick: next }, 'Suivant')])]);
     }
-    return el('div', { class: 'ob-actions', style: 'flex-direction:column' }, Object.entries(COLLE_PROGRAMS).map(([id, p]) =>   // page 5 : Thomas ou Daphné
+    return el('div', { class: 'ob-actions', style: 'flex-direction:column' }, Object.entries(COLLE_PROGRAMS).map(([id, p]) =>   // page 5 : Thomas, Daphné ou Valentin
       el('button', { class: 'btn primary', onclick: () => { draft.who = id; next(); } }, `${p.label} · groupe ${p.group}`)));
   };
 

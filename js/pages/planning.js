@@ -7,9 +7,11 @@ import { iconHtml } from '../ui/icons.js';
 
 import { DAY_LABELS, buildWeek, formatDuration, loadOverrides, removeOverride, saveOverride, toMin } from '../features/planning.js';
 
-import { addBtn, el } from '../ui/helpers.js';
+import { addBtn, el, showToast } from '../ui/helpers.js';
+import { JOKER_TITLE, JOKERS_PER_WEEK, addJoker, isCurrentWeek, jokerChoices, jokerEvents, removeJoker } from '../features/joker.js';
+import { loadAll } from '../features/seed.js';
 
-import { getCaracSettings, recomputeCaracs } from '../features/caracs.js';
+import { getCaracSettings, recomputeCaracs, weekGoals } from '../features/caracs.js';
 import { weekGoalsFor } from '../features/work-goals.js';
 import { DEFAULT_PERIOD_BLOCKS, PLAN_CATS, PLAN_SWATCHES, applyPlanColors, periodBlocksFor, planColor, prefsNow, savePrefs } from '../features/prefs.js';
 
@@ -42,7 +44,7 @@ function eventCard(ev, onTap, day) {
   return el('div', { class: `pl-card pl-${ev.type} pl-tap${isLive ? ' pl-now' : ''}`, style: `min-height:${hCard(min)}px`, onclick: () => onTap(ev) }, [
     timeCol(ev.start, ev.end),
     el('div', { class: 'pl-body' }, [
-      el('div', { class: 'pl-title' }, [ev.title, dur ? el('span', { class: 'pl-chip' }, dur) : null, ev.modified ? el('span', { class: 'pl-chip' }, 'modifié') : null, isLive ? el('span', { class: 'pl-chip pl-chip-live' }, 'en cours') : null]),
+      el('div', { class: 'pl-title' }, [ev.title, dur ? el('span', { class: 'pl-chip' }, dur) : null, isLive ? el('span', { class: 'pl-chip pl-chip-live' }, 'en cours') : null]),
       meta ? el('div', { class: 'pl-meta' }, meta) : null,
       min >= 75 ? el('div', { class: 'pl-dur' }, formatDuration(min)) : null
     ])
@@ -61,9 +63,10 @@ function freeCard(b, onTap, day) {
 // Pause : pas de boîte, une simple bande en fond (modifiable au toucher comme les autres créneaux).
 function pauseCard(p, onTap) {
   const min = spanMin(p.start, p.end);
-  return el('div', { class: 'pl-card pl-pause pl-tap', style: `min-height:${hPause(min)}px`, onclick: () => onTap(p) }, [
+  const tint = p.type === 'trajet' ? ';--ev-pause:var(--ev-trajet)' : '';   // même bande que la pause repas, couleur de la catégorie
+  return el('div', { class: 'pl-card pl-pause pl-tap', style: `min-height:${hPause(min)}px${tint}`, onclick: () => onTap(p) }, [
     timeCol(p.start, p.end),
-    el('div', { class: 'pl-body' }, [el('div', { class: 'pl-title' }, [p.title || 'Pause repas', p.modified ? el('span', { class: 'pl-chip' }, 'modifié') : null])])
+    el('div', { class: 'pl-body' }, [el('div', { class: 'pl-title' }, p.title || 'Pause repas')])
   ]);
 }
 
@@ -117,6 +120,12 @@ export async function renderPlanning(root) {
     el('div', { class: 'pl-stat' }, [el('span', { class: 'pl-stat-l' }, 'Temps libre'), el('b', { class: 'pl-stat-v' }, formatDuration(week.freeMinutes))]),
     el('div', { class: 'pl-stat' }, [el('span', { class: 'pl-stat-l' }, goals.dynamic ? `Travail attendu · ${pct} %` : 'Travail attendu · objectif fixe'), el('b', { class: 'pl-stat-v accent' }, formatDuration(Math.round(goals.total)))])
   ]));
+  const jokers = jokerEvents(week);
+  if (jokers.length) {
+    const jd = week.days.find(d => d.date === jokers[0].date);
+    root.appendChild(el('button', { type: 'button', class: 'pl-joker-note', onclick: () => openJoker(week, goals, rerender, jokers[0]) },
+      [el('span', { html: iconHtml('star') }), `Joker : soirée du ${jd.label.toLowerCase()} ${parseKey(jd.date).getDate()} banalisée`]));
+  }
   root.appendChild(el('div', { class: 'pl-days' }, week.days.map((d, i) => el('button', {
     class: `pl-day${i === view.day ? ' active' : ''}${d.date === today ? ' today' : ''}`,
     onclick: () => { view.day = i; root.innerHTML = ''; renderPlanning(root); }
@@ -135,8 +144,66 @@ export async function renderPlanning(root) {
   }
   const banner = periodBanner(week.days[view.day], rerender);
   if (banner) root.appendChild(banner);
-  root.appendChild(dayList(week.days[view.day], week.mode, (ev) => openEditor(ev, week, rerender)));
+  root.appendChild(dayList(week.days[view.day], week.mode, (ev) => (ev.type === 'joker' ? openJoker(week, goals, rerender, ev) : openEditor(ev, week, rerender))));
   root.appendChild(addBtn('Ajouter un créneau', () => openEditor(null, week, rerender), 'pl-add'));
+  if (isCurrentWeek(week.monday) && jokers.length < JOKERS_PER_WEEK && jokerChoices(week).length) {
+    root.appendChild(el('button', { type: 'button', class: 'add-btn pl-add pl-joker-btn', onclick: () => openJoker(week, goals, rerender) }, [el('span', { class: 'add-plus', html: iconHtml('star') }), ' Utiliser mon joker']));
+  }
+}
+
+// ── Joker : banalise une soirée de travail de la semaine en cours ───────────
+async function openJoker(week, goals, rerender, ev = null) {
+  const close = () => overlay.remove();
+  const body = el('div', { class: 'pl-form' });
+  const overlay = el('div', { class: 'gpx-preview-overlay', onclick: (e) => { if (e.target === overlay) close(); } });
+  const modal = el('div', { class: 'gpx-preview-modal' }, [
+    el('div', { class: 'gpx-preview-head' }, [
+      el('div', { class: 'gpx-preview-title' }, [el('span', { class: 'gpx-preview-icon', html: iconHtml('star') }), el('span', {}, 'Joker')]),
+      el('button', { class: 'gpx-preview-close', 'aria-label': 'Fermer', onclick: close, html: iconHtml('close') })
+    ]),
+    body
+  ]);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  const fail = (e) => showToast({ type: 'err', title: 'Joker', text: e.message }, 3500);
+
+  if (ev) {   // joker déjà posé : on peut le retirer
+    const d = week.days.find(x => x.date === ev.date);
+    body.append(
+      el('div', { class: 'pl-hint' }, `Soirée du ${d.label.toLowerCase()} ${parseKey(d.date).getDate()} banalisée (${range(ev.start, ev.end)}).`),
+      el('button', { class: 'btn full danger', onclick: async () => {
+        try { await removeJoker(ev); await loadAll(); close(); rerender(); showToast({ type: 'xp', title: 'Joker retiré', text: 'Objectifs recalculés.' }, 3000); } catch (e) { fail(e); }
+      } }, 'Retirer le joker')
+    );
+    return;
+  }
+
+  const choices = jokerChoices(week);
+  let pick = (choices.find(c => c.day.date === todayKey()) || choices[0]).day.date;
+  const cfg = await getCaracSettings();
+  const info = el('div', { class: 'pl-hint' });
+  const catBox = el('div', { class: 'pl-cats', role: 'radiogroup', 'aria-label': 'Soirée à banaliser' });
+  const paint = () => {
+    catBox.replaceChildren(...choices.map(({ day, eve }) => el('button', {
+      type: 'button', role: 'radio', class: 'pl-cat' + (day.date === pick ? ' on' : ''), 'aria-checked': String(day.date === pick),
+      onclick: () => { pick = day.date; paint(); }
+    }, `${day.label.slice(0, 3)} ${parseKey(day.date).getDate()} · ${formatDuration(eve.minutes)}`)));
+    const eve = choices.find(c => c.day.date === pick).eve;
+    if (goals.dynamic) {
+      const after = Math.round(weekGoals(cfg, week.monday, Math.max(0, week.freeMinutes - eve.minutes)).total);
+      info.textContent = `Temps libre −${formatDuration(eve.minutes)} · travail attendu ${formatDuration(Math.round(goals.total))} → ${formatDuration(after)}`;
+    } else info.textContent = `Temps libre −${formatDuration(eve.minutes)}`;
+  };
+  paint();
+  body.append(
+    el('div', { class: 'pl-hint' }, `Banalise une soirée de travail de cette semaine (${JOKERS_PER_WEEK} par semaine).`),
+    catBox, info,
+    el('button', { class: 'btn full', onclick: async (e) => {
+      e.currentTarget.disabled = true;
+      try { await addJoker(week, pick); await loadAll(); close(); rerender(); showToast({ type: 'xp', icon: 'star', title: JOKER_TITLE, text: 'Objectifs de la semaine recalculés.' }, 3500); }
+      catch (err) { fail(err); e.currentTarget.disabled = false; }
+    } }, 'Utiliser le joker')
+  );
 }
 
 // ── Édition d'un créneau (sans jamais toucher à l'emploi du temps de base) ───
@@ -165,8 +232,9 @@ function openEditor(ev, week, rerender) {
     const prev = curCat; curCat = k;
     catBox.querySelectorAll('.pl-cat').forEach(b => { const on = b.dataset.k === k; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
     fTeacher.hidden = !showsTeacher(); fRoom.hidden = !showsRoom();
-    if (k === 'pause' && !inTitle.value.trim()) inTitle.value = 'Pause repas';
-    else if (prev === 'pause' && inTitle.value.trim() === 'Pause repas' && k !== 'pause') inTitle.value = '';
+    const DEF = { pause: 'Pause repas', trajet: 'Retour à la maison' };   // intitulé proposé pour ces catégories
+    if (DEF[k] && (!inTitle.value.trim() || inTitle.value.trim() === DEF[prev])) inTitle.value = DEF[k];
+    else if (!DEF[k] && DEF[prev] && inTitle.value.trim() === DEF[prev]) inTitle.value = '';
   }
   const recurring = isNew || !!ev.recurKey;
   let scope = 'week';

@@ -5,6 +5,8 @@ import { activeCaracs, getCaracSettings, loadCaracHistory } from '../features/ca
 import { el, escapeHtml } from '../ui/helpers.js';
 import { COLORS, iconHtml } from '../ui/icons.js';
 import { State } from '../core/state.js';
+import { addDays, mondayOf } from '../core/calendar.js';
+import { formatDate } from '../core/dates.js';
 
 // Échelle du graphe : 0 → 20 (anneau extérieur = 20) ; une valeur au-delà est écrêtée au bord.
 const SIZE = 320, C = SIZE / 2, RMAX = 20, R_OUT = 126, ICON_R = 144;
@@ -40,7 +42,7 @@ function paint(card, { hist, cfg }, ctl) {
   ].filter(Boolean)));
 
   if (!last) {
-    card.appendChild(el('div', { class: 'dim text-sm' }, 'Premier calcul le lundi 7 septembre (une fois la première semaine terminée). Les valeurs ne bougent qu\'à la clôture de chaque semaine.'));
+    card.appendChild(el('div', { class: 'dim text-sm' }, 'Premier calcul le ' + formatDate(addDays(mondayOf(cfg.start), 7)) + ', une fois la semaine terminée.'));
     return;
   }
 

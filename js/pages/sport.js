@@ -1,5 +1,5 @@
 // Page Sport
-import { formatDate, weekKey } from '../core/dates.js';
+import { formatDate, todayKey, weekKey } from '../core/dates.js';
 import { dbAll, dbAllLive, dbClear, dbDelete, dbPut, isGhostDate } from '../core/db.js';
 import { State } from '../core/state.js';
 import { awardXp, deriveLevel, removeXp } from '../core/xp.js';
@@ -38,7 +38,9 @@ export function renderSport(root) {
   const fileInput = el('input', { type: 'file', accept: '.gpx', hidden: 'true' });
   fileInput.addEventListener('change', onGpxFile);
   importLabel.appendChild(fileInput);
-  title.appendChild(importLabel);
+  const addBtn = el('button', { type: 'button', class: 'btn-gpx', title: 'Ajouter une sortie sans GPX', onclick: () => openManualActivity() });
+  addBtn.innerHTML = `<span style="font-size:1.15rem;font-weight:700;line-height:1;">+</span><span>Sortie</span>`;
+  title.append(addBtn, importLabel);
   page.appendChild(title);
 
   // Objectif de sorties de la semaine (− / +) et justification : réglés ici, côté sport.
@@ -53,8 +55,11 @@ export function renderSport(root) {
     const empty = el('div', { class: 'card center', style: 'padding:40px; text-align:center;', html: `
       <div class="text-2xl mb-2">${iconHtml('peak')}</div>
       <h3 class="mb-2">Aucune sortie</h3>
-      <div class="dim text-sm mb-4">Importe ton premier fichier GPX.</div>
+      <div class="dim text-sm mb-4">Importe un GPX ou ajoute ta sortie.</div>
     `});
+    const emptyAdd = el('button', { type: 'button', class: 'btn-gpx', onclick: () => openManualActivity() });
+    emptyAdd.innerHTML = `<span style="font-size:1.15rem;font-weight:700;line-height:1;">+</span><span>Ajouter une sortie</span>`;
+    empty.appendChild(emptyAdd);
     page.appendChild(empty);
     root.appendChild(page);
     return;
@@ -62,11 +67,13 @@ export function renderSport(root) {
 
   if (!State.currentActivity) State.currentActivity = [...State.activities].sort((a, b) => b.date.localeCompare(a.date))[0];   // par défaut : la dernière sortie
 
-  // Map
-  const mapWrap = el('div', { class: 'map-wrap mb-3' });
-  const mapEl = el('div', { class: 'map', id: 'sport-map' });
-  mapWrap.appendChild(mapEl);
-  page.appendChild(mapWrap);
+  // Map (sorties sans GPX : pas de carte)
+  if (State.currentActivity.points?.length) {
+    const mapWrap = el('div', { class: 'map-wrap mb-3' });
+    const mapEl = el('div', { class: 'map', id: 'sport-map' });
+    mapWrap.appendChild(mapEl);
+    page.appendChild(mapWrap);
+  }
 
   // Selected activity card
   const sel = State.currentActivity;
@@ -327,7 +334,8 @@ export function renderMapInto(mapEl, activity) {
 
 export function renderMap(activity) {
   const mapEl = document.getElementById('sport-map');
-  if (!mapEl) return;
+  if (State.map) { try { State.map.remove(); } catch {} State.map = null; }
+  if (!mapEl || !activity?.points?.length) return;
   if (State.map) { try { State.map.remove(); } catch {} State.map = null; }
   State.map = renderMapInto(mapEl, activity);
 }
@@ -388,6 +396,130 @@ export function showGpxPreview(parsed, type, splits, xp) {
   });
 }
 
+// Enregistre une sortie (GPX ou saisie à la main) : XP, records, quêtes, caractéristiques.
+// Passe par withWeekRecalc : si la sortie tombe dans une semaine déjà évaluée, quêtes, malus et bonus de cette semaine sont recalculés.
+async function commitActivity(activity, toastText) {
+  const { xpAwarded: xp, skillsAwarded: skills } = activity;
+  if (isGhostDate(activity.date)) {
+    activity.xpAwarded = 0;
+    activity.skillsAwarded = {};
+    await dbPut('activities', activity);
+    showToast({ type: 'xp', title: 'Sortie archivée', text: 'Antérieure au 15 août : stockée mais non comptée.' }, 4000);
+    await loadAll();
+    render();
+    return;
+  }
+  let result, broken;
+  await withWeekRecalc(weekKey(new Date(activity.date)), async () => {
+    await dbPut('activities', activity);
+    result = await awardXp(xp, skills);
+    broken = await checkAndUpdateRecords(activity);
+  });
+  await recomputeAutoQuests();
+  await refreshCaracs();
+  await loadAll();
+  State.currentActivity = activity;
+
+  if (broken.length > 0) showPRCelebration(broken);
+  else showToast({
+    type: result.leveledUp ? 'levelup' : 'xp',
+    title: result.leveledUp ? `Niveau ${result.toLevel} !` : `+${xp} XP`,
+    text: toastText
+  }, 4000);
+  render();
+}
+
+// Fenêtre « Ajouter une sortie » (sans GPX) : date, distance, durée, catégorie, D+ facultatif.
+const MANUAL_CATS = ['footing', 'fractionne', 'sortie-longue', 'trail', 'rando'];
+function openManualActivity() {
+  const overlay = el('div', { class: 'gpx-preview-overlay' });
+  const modal = el('div', { class: 'gpx-preview-modal' });
+  const today = todayKey(new Date());
+  modal.innerHTML = `
+    <div class="gpx-preview-head">
+      <div class="gpx-preview-title"><span class="gpx-preview-icon">${iconHtml('run')}</span><span>Ajouter une sortie</span></div>
+      <button class="gpx-preview-close" aria-label="Fermer">${iconHtml('close')}</button>
+    </div>
+    <div style="padding: 16px 18px; overflow-y: auto;">
+      <div class="dim text-xs mb-1">Date</div>
+      <input class="input ma-date nt-time" type="date" value="${today}" max="${today}" style="width:100%;" />
+      <div class="dim text-xs mb-1 mt-3">Distance (km)</div>
+      <input class="input ma-km" type="text" inputmode="decimal" autocomplete="off" placeholder="10" style="width:100%;" />
+      <div class="dim text-xs mb-1 mt-3">Durée</div>
+      <div class="flex gap-2">
+        <input class="input ma-h" type="number" inputmode="numeric" min="0" max="23" placeholder="0" style="flex:1;" aria-label="Heures" /><span class="dim" style="align-self:center;">h</span>
+        <input class="input ma-min" type="number" inputmode="numeric" min="0" max="59" placeholder="45" style="flex:1;" aria-label="Minutes" /><span class="dim" style="align-self:center;">min</span>
+      </div>
+      <div class="dim text-xs mb-1 mt-3">Catégorie</div>
+      <select class="input ma-cat" style="width:100%;">${MANUAL_CATS.map(c => `<option value="${c}">${SPORT_TYPES[c]?.label || c}</option>`).join('')}</select>
+      <div class="dim text-xs mb-1 mt-3">D+ (m, facultatif)</div>
+      <input class="input ma-d" type="number" inputmode="numeric" min="0" step="1" placeholder="0" style="width:100%;" />
+      <div class="dim text-xs mt-3 ma-sum"></div>
+      <div class="dim text-xs mt-1 ma-err" style="color:#c4584a;"></div>
+    </div>
+    <div class="gpx-preview-actions">
+      <button class="btn ghost" id="ma-cancel">Annuler</button>
+      <button class="btn-gpx" id="ma-ok">Ajouter</button>
+    </div>`;
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  const q = (c) => modal.querySelector(c);
+  const read = () => {
+    const km = parseFloat(String(q('.ma-km').value).replace(',', '.')) || 0;
+    const seconds = Math.round(((parseInt(q('.ma-h').value, 10) || 0) * 60 + (parseInt(q('.ma-min').value, 10) || 0)) * 60);
+    const dPlus = Math.max(0, parseInt(q('.ma-d').value, 10) || 0);
+    return { date: q('.ma-date').value, km: Math.round(km * 100) / 100, seconds, dPlus, cat: q('.ma-cat').value };
+  };
+  const build = ({ date, km, seconds, dPlus, cat }) => ({
+    date: new Date(date + 'T12:00:00').toISOString(),
+    points: [], manual: true,
+    distance: Math.round(km * 1000), distanceKm: km, elevGain: dPlus, elevLoss: 0,
+    duration: seconds, avgPace: Math.round(seconds / km), avgSpeed: Math.round(km / (seconds / 3600) * 10) / 10,
+    type: cat
+  });
+  const check = (v) => {
+    if (!v.date) return 'Choisis une date.';
+    if (v.date > today) return 'La date ne peut pas être dans le futur.';
+    if (!(v.km > 0) || v.km > 300) return 'Entre une distance en km.';
+    if (v.seconds < 60) return 'Entre une durée.';
+    const pace = v.seconds / v.km;
+    if (pace < 120 || pace > 1800) return 'Distance et durée incohérentes.';
+    return '';
+  };
+  const preview = () => {
+    const v = read();
+    if (check(v)) { q('.ma-sum').textContent = ''; return; }
+    const parsed = build(v);
+    q('.ma-sum').textContent = `${formatPace(parsed.avgPace)} · +${activityXp(parsed, v.cat).xp} XP`;
+  };
+  modal.querySelectorAll('input, select').forEach(i => i.addEventListener('input', () => { q('.ma-err').textContent = ''; preview(); }));
+  q('.gpx-preview-close').addEventListener('click', close);
+  q('#ma-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  q('#ma-ok').addEventListener('click', async () => {
+    const v = read();
+    const err = check(v);
+    if (err) { q('.ma-err').textContent = err; return; }
+    q('#ma-ok').disabled = true;
+    try {
+      const parsed = build(v);
+      const { xp, skills } = activityXp(parsed, v.cat);
+      const activity = {
+        id: 'act-' + Date.now(), ...parsed,
+        name: defaultActivityName(v.cat, parsed.date),
+        ...computeSplits(parsed), intervals: null,
+        xpAwarded: xp, skillsAwarded: skills
+      };
+      close();
+      await commitActivity(activity, `${v.km} km • ${formatDuration(v.seconds)}`);
+    } catch (e) {
+      showToast({ type: 'err', title: 'Erreur', text: e.message }, 4000);
+      q('#ma-ok').disabled = false;
+    }
+  });
+}
+
 export async function onGpxFile(e) {
   const file = e.target.files?.[0];
   if (!file) return;
@@ -419,35 +551,7 @@ export async function onGpxFile(e) {
       xpAwarded: xp,
       skillsAwarded: skills
     };
-    if (isGhostDate(activity.date)) {
-      activity.xpAwarded = 0;
-      activity.skillsAwarded = {};
-      await dbPut('activities', activity);
-      showToast({ type: 'xp', title: 'Sortie archivée', text: 'Antérieure au 15 août : stockée mais non comptée.' }, 4000);
-      await loadAll();
-      render();
-      return;
-    }
-    // Passe par withWeekRecalc : si la sortie tombe dans une semaine déjà évaluée,
-    // quêtes, malus et bonus de cette semaine sont recalculés.
-    let result, broken;
-    await withWeekRecalc(weekKey(new Date(activity.date)), async () => {
-      await dbPut('activities', activity);
-      result = await awardXp(xp, skills);
-      broken = await checkAndUpdateRecords(activity);
-    });
-    await recomputeAutoQuests();
-    await refreshCaracs();
-    await loadAll();
-    State.currentActivity = activity;
-
-    if (broken.length > 0) showPRCelebration(broken);
-    else showToast({
-      type: result.leveledUp ? 'levelup' : 'xp',
-      title: result.leveledUp ? `Niveau ${result.toLevel} !` : `+${xp} XP`,
-      text: `${parsed.distanceKm} km • ${parsed.elevGain} m D+`
-    }, 4000);
-    render();
+    await commitActivity(activity, `${parsed.distanceKm} km • ${parsed.elevGain} m D+`);
   } catch (err) {
     showToast({ type: 'err', title: 'Erreur', text: err.message }, 4000);
   } finally {
